@@ -234,6 +234,127 @@ func TestEvaluate_RegexOperator(t *testing.T) {
 	assert.False(t, resp.Match)
 }
 
+// --- Segment tests ---
+
+func makeSegment(key string, conditions ...models.Condition) *models.Segment {
+	return &models.Segment{
+		Key:        key,
+		Conditions: conditions,
+	}
+}
+
+func makeRuleWithSegments(priority int, value interface{}, segmentKeys []string, conditions ...models.Condition) models.Rule {
+	return models.Rule{
+		Priority:    priority,
+		Value:       MustJSON(value),
+		SegmentKeys: segmentKeys,
+		Conditions:  conditions,
+	}
+}
+
+func TestEvaluate_SegmentOnly(t *testing.T) {
+	seg := makeSegment("pro_users", makeCond("user.plan", models.OpEquals, "pro"))
+	flag := makeFlag(true, models.FlagTypeBoolean, false,
+		makeRuleWithSegments(1, true, []string{"pro_users"}),
+	)
+	flag.Segments = map[string]*models.Segment{"pro_users": seg}
+
+	// Match
+	resp := Evaluate(flag, EvalContext{
+		"user": map[string]interface{}{"plan": "pro"},
+	})
+	assert.True(t, resp.Match)
+	assert.Equal(t, MustJSON(true), resp.Value)
+	assert.Equal(t, ReasonRuleMatch, resp.Reason)
+
+	// No match
+	resp = Evaluate(flag, EvalContext{
+		"user": map[string]interface{}{"plan": "free"},
+	})
+	assert.False(t, resp.Match)
+	assert.Equal(t, ReasonDefault, resp.Reason)
+}
+
+func TestEvaluate_SegmentPlusInlineConditions(t *testing.T) {
+	seg := makeSegment("pro_users", makeCond("user.plan", models.OpEquals, "pro"))
+	flag := makeFlag(true, models.FlagTypeString, "basic",
+		makeRuleWithSegments(1, "premium", []string{"pro_users"},
+			makeCond("country", models.OpIn, []string{"FR", "DE"}),
+		),
+	)
+	flag.Segments = map[string]*models.Segment{"pro_users": seg}
+
+	// Both segment and inline match
+	resp := Evaluate(flag, EvalContext{
+		"user":    map[string]interface{}{"plan": "pro"},
+		"country": "FR",
+	})
+	assert.True(t, resp.Match)
+	assert.Equal(t, MustJSON("premium"), resp.Value)
+
+	// Segment matches but inline doesn't
+	resp = Evaluate(flag, EvalContext{
+		"user":    map[string]interface{}{"plan": "pro"},
+		"country": "US",
+	})
+	assert.False(t, resp.Match)
+
+	// Inline matches but segment doesn't
+	resp = Evaluate(flag, EvalContext{
+		"user":    map[string]interface{}{"plan": "free"},
+		"country": "FR",
+	})
+	assert.False(t, resp.Match)
+}
+
+func TestEvaluate_MissingSegment_FailClosed(t *testing.T) {
+	// Rule references a segment that is not in the map
+	flag := makeFlag(true, models.FlagTypeBoolean, false,
+		makeRuleWithSegments(1, true, []string{"nonexistent_segment"}),
+	)
+	flag.Segments = map[string]*models.Segment{} // empty map
+
+	resp := Evaluate(flag, EvalContext{"anything": "value"})
+	assert.False(t, resp.Match)
+	assert.Equal(t, ReasonDefault, resp.Reason)
+}
+
+func TestEvaluate_NilSegmentsMap_FailClosed(t *testing.T) {
+	flag := makeFlag(true, models.FlagTypeBoolean, false,
+		makeRuleWithSegments(1, true, []string{"some_segment"}),
+	)
+	// Segments is nil (not loaded)
+
+	resp := Evaluate(flag, EvalContext{"anything": "value"})
+	assert.False(t, resp.Match)
+	assert.Equal(t, ReasonDefault, resp.Reason)
+}
+
+func TestEvaluate_MultiSegments(t *testing.T) {
+	segPro := makeSegment("pro_users", makeCond("user.plan", models.OpEquals, "pro"))
+	segBeta := makeSegment("beta_testers", makeCond("user.beta", models.OpEquals, true))
+
+	flag := makeFlag(true, models.FlagTypeBoolean, false,
+		makeRuleWithSegments(1, true, []string{"pro_users", "beta_testers"}),
+	)
+	flag.Segments = map[string]*models.Segment{
+		"pro_users":    segPro,
+		"beta_testers": segBeta,
+	}
+
+	// Both segments match
+	resp := Evaluate(flag, EvalContext{
+		"user": map[string]interface{}{"plan": "pro", "beta": true},
+	})
+	assert.True(t, resp.Match)
+
+	// Only first segment matches
+	resp = Evaluate(flag, EvalContext{
+		"user": map[string]interface{}{"plan": "pro", "beta": false},
+	})
+	assert.False(t, resp.Match)
+}
+
 // Benchmark
 
 func BenchmarkEvaluate_SimpleRule(b *testing.B) {

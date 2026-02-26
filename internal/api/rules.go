@@ -38,6 +38,7 @@ func (s *Server) CreateRule(w http.ResponseWriter, r *http.Request) {
 		Priority:          req.Priority,
 		RolloutPercentage: req.RolloutPercentage,
 		Conditions:        req.Conditions,
+		SegmentKeys:       req.SegmentKeys,
 	}
 
 	if err := models.ValidateRule(rule); err != nil {
@@ -81,6 +82,7 @@ func (s *Server) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		Priority:          req.Priority,
 		RolloutPercentage: req.RolloutPercentage,
 		Conditions:        req.Conditions,
+		SegmentKeys:       req.SegmentKeys,
 	}
 	if err := models.ValidateRule(rule); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())

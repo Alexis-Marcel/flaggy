@@ -17,6 +17,13 @@ type Store interface {
 	UpdateRule(flagKey string, ruleID int64, req *models.CreateRuleRequest) (*models.Rule, error)
 	DeleteRule(flagKey string, ruleID int64) error
 
+	// Segments
+	CreateSegment(segment *models.Segment) error
+	GetSegment(key string) (*models.Segment, error)
+	ListSegments() ([]models.Segment, error)
+	UpdateSegment(key string, req *models.UpdateSegmentRequest) (*models.Segment, error)
+	DeleteSegment(key string) error
+
 	// Evaluation
 	GetFlagForEvaluation(key string) (*models.Flag, error)
 

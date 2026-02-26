@@ -19,6 +19,7 @@ type UpdateFlagRequest struct {
 type CreateRuleRequest struct {
 	Description       string          `json:"description"`
 	Conditions        []Condition     `json:"conditions"`
+	SegmentKeys       []string        `json:"segment_keys,omitempty"`
 	Value             json.RawMessage `json:"value"`
 	Priority          int             `json:"priority"`
 	RolloutPercentage int             `json:"rollout_percentage"`

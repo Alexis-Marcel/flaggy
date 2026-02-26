@@ -50,6 +50,9 @@ type Flag struct {
 	Rules        []Rule          `json:"rules,omitempty"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
+
+	// Segments is populated only during evaluation — maps segment key to segment.
+	Segments map[string]*Segment `json:"-"`
 }
 
 type Rule struct {
@@ -60,6 +63,7 @@ type Rule struct {
 	Priority          int             `json:"priority"`
 	RolloutPercentage int             `json:"rollout_percentage"`
 	Conditions        []Condition     `json:"conditions"`
+	SegmentKeys       []string        `json:"segment_keys,omitempty"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 }
@@ -91,8 +95,8 @@ func ValidateFlag(f *Flag) error {
 }
 
 func ValidateRule(r *Rule) error {
-	if len(r.Conditions) == 0 {
-		return fmt.Errorf("rule must have at least one condition")
+	if len(r.Conditions) == 0 && len(r.SegmentKeys) == 0 {
+		return fmt.Errorf("rule must have at least one condition or segment")
 	}
 	if r.RolloutPercentage < 0 || r.RolloutPercentage > 100 {
 		return fmt.Errorf("rollout_percentage must be between 0 and 100")

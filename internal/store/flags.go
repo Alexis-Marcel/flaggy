@@ -144,6 +144,11 @@ func (s *SQLiteStore) CreateRule(flagKey string, rule *models.Rule) error {
 	}
 	defer tx.Rollback()
 
+	// Validate that all referenced segments exist
+	if err := validateSegmentKeys(tx, rule.SegmentKeys); err != nil {
+		return err
+	}
+
 	res, err := tx.Exec(
 		`INSERT INTO rules (flag_key, description, value, priority, rollout_percentage, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -172,6 +177,16 @@ func (s *SQLiteStore) CreateRule(flagKey string, rule *models.Rule) error {
 		c.ID = cID
 	}
 
+	// Insert rule_segments
+	for _, sk := range rule.SegmentKeys {
+		if _, err := tx.Exec(
+			`INSERT INTO rule_segments (rule_id, segment_key) VALUES (?, ?)`,
+			ruleID, sk,
+		); err != nil {
+			return fmt.Errorf("insert rule_segment: %w", err)
+		}
+	}
+
 	return tx.Commit()
 }
 
@@ -183,6 +198,11 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
+
+	// Validate that all referenced segments exist
+	if err := validateSegmentKeys(tx, req.SegmentKeys); err != nil {
+		return nil, err
+	}
 
 	res, err := tx.Exec(
 		`UPDATE rules SET description = ?, value = ?, priority = ?, rollout_percentage = ?, updated_at = ?
@@ -201,6 +221,19 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 		return nil, fmt.Errorf("delete conditions: %w", err)
 	}
 
+	// Replace rule_segments
+	if _, err := tx.Exec(`DELETE FROM rule_segments WHERE rule_id = ?`, ruleID); err != nil {
+		return nil, fmt.Errorf("delete rule_segments: %w", err)
+	}
+	for _, sk := range req.SegmentKeys {
+		if _, err := tx.Exec(
+			`INSERT INTO rule_segments (rule_id, segment_key) VALUES (?, ?)`,
+			ruleID, sk,
+		); err != nil {
+			return nil, fmt.Errorf("insert rule_segment: %w", err)
+		}
+	}
+
 	rule := &models.Rule{
 		ID:                ruleID,
 		FlagKey:           flagKey,
@@ -208,6 +241,7 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 		Value:             req.Value,
 		Priority:          req.Priority,
 		RolloutPercentage: req.RolloutPercentage,
+		SegmentKeys:       req.SegmentKeys,
 		UpdatedAt:         now,
 	}
 
@@ -251,10 +285,85 @@ func (s *SQLiteStore) DeleteRule(flagKey string, ruleID int64) error {
 	return nil
 }
 
+// --- Helpers ---
+
+// validateSegmentKeys checks that all segment keys exist in the DB.
+func validateSegmentKeys(tx *sql.Tx, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	// Build a query to count existing keys
+	query := `SELECT key FROM segments WHERE key IN (`
+	args := make([]interface{}, len(keys))
+	for i, k := range keys {
+		if i > 0 {
+			query += ","
+		}
+		query += "?"
+		args[i] = k
+	}
+	query += ")"
+
+	rows, err := tx.Query(query, args...)
+	if err != nil {
+		return fmt.Errorf("validate segment keys: %w", err)
+	}
+	defer rows.Close()
+
+	found := make(map[string]bool)
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return fmt.Errorf("scan segment key: %w", err)
+		}
+		found[k] = true
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("validate segment keys: %w", err)
+	}
+
+	for _, k := range keys {
+		if !found[k] {
+			return fmt.Errorf("segment %q not found", k)
+		}
+	}
+	return nil
+}
+
 // --- Evaluation ---
 
+// GetFlagForEvaluation returns the flag with rules, conditions, and referenced segments.
 func (s *SQLiteStore) GetFlagForEvaluation(key string) (*models.Flag, error) {
-	return s.GetFlag(key)
+	flag, err := s.GetFlag(key)
+	if err != nil || flag == nil {
+		return flag, err
+	}
+
+	// Collect unique segment keys from all rules
+	segKeySet := make(map[string]bool)
+	for _, r := range flag.Rules {
+		for _, sk := range r.SegmentKeys {
+			segKeySet[sk] = true
+		}
+	}
+	if len(segKeySet) == 0 {
+		return flag, nil
+	}
+
+	// Load referenced segments
+	segments := make(map[string]*models.Segment)
+	for sk := range segKeySet {
+		seg, err := s.GetSegment(sk)
+		if err != nil {
+			return nil, fmt.Errorf("load segment %q: %w", sk, err)
+		}
+		if seg != nil {
+			segments[sk] = seg
+		}
+	}
+	flag.Segments = segments
+
+	return flag, nil
 }
 
 func (s *SQLiteStore) getRulesForFlag(flagKey string) ([]models.Rule, error) {
@@ -314,5 +423,48 @@ func (s *SQLiteStore) getRulesForFlag(flagKey string) ([]models.Rule, error) {
 	for _, id := range ruleOrder {
 		rules = append(rules, *ruleMap[id])
 	}
-	return rules, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Load segment_keys for all rules
+	if len(ruleOrder) > 0 {
+		query := `SELECT rule_id, segment_key FROM rule_segments WHERE rule_id IN (`
+		args := make([]interface{}, len(ruleOrder))
+		for i, id := range ruleOrder {
+			if i > 0 {
+				query += ","
+			}
+			query += "?"
+			args[i] = id
+		}
+		query += `) ORDER BY rule_id, segment_key`
+
+		segRows, err := s.db.Query(query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("get rule segments: %w", err)
+		}
+		defer segRows.Close()
+
+		segMap := make(map[int64][]string)
+		for segRows.Next() {
+			var ruleID int64
+			var segKey string
+			if err := segRows.Scan(&ruleID, &segKey); err != nil {
+				return nil, fmt.Errorf("scan rule segment: %w", err)
+			}
+			segMap[ruleID] = append(segMap[ruleID], segKey)
+		}
+		if err := segRows.Err(); err != nil {
+			return nil, err
+		}
+
+		for i := range rules {
+			if keys, ok := segMap[rules[i].ID]; ok {
+				rules[i].SegmentKeys = keys
+			}
+		}
+	}
+
+	return rules, nil
 }

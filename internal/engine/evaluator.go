@@ -49,7 +49,7 @@ func Evaluate(flag *models.Flag, ctx EvalContext) models.EvaluateResponse {
 	entityID, _ := resolveEntityID(ctx)
 
 	for _, rule := range rules {
-		matched, err := evalRule(&rule, ctx)
+		matched, err := evalRule(&rule, ctx, flag.Segments)
 		if err != nil {
 			resp.Value = flag.DefaultValue
 			resp.Reason = ReasonError
@@ -74,8 +74,10 @@ func Evaluate(flag *models.Flag, ctx EvalContext) models.EvaluateResponse {
 	return resp
 }
 
-// evalRule returns true if ALL conditions in the rule match.
-func evalRule(rule *models.Rule, ctx EvalContext) (bool, error) {
+// evalRule returns true if ALL inline conditions AND all segment conditions match.
+// Fail closed: if a referenced segment is not found in the map, the rule does not match.
+func evalRule(rule *models.Rule, ctx EvalContext, segments map[string]*models.Segment) (bool, error) {
+	// Evaluate inline conditions
 	for i := range rule.Conditions {
 		ok, err := EvalCondition(&rule.Conditions[i], ctx)
 		if err != nil {
@@ -85,6 +87,25 @@ func evalRule(rule *models.Rule, ctx EvalContext) (bool, error) {
 			return false, nil
 		}
 	}
+
+	// Evaluate segment conditions (AND with inline conditions)
+	for _, segKey := range rule.SegmentKeys {
+		seg, ok := segments[segKey]
+		if !ok || seg == nil {
+			// Fail closed: missing segment → rule does not match
+			return false, nil
+		}
+		for i := range seg.Conditions {
+			ok, err := EvalCondition(&seg.Conditions[i], ctx)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				return false, nil
+			}
+		}
+	}
+
 	return true, nil
 }
 

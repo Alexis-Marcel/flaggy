@@ -47,6 +47,13 @@ func NewRouter(s store.Store, b *sse.Broadcaster, masterKey string) *chi.Mux {
 			r.Put("/flags/{key}/rules/{ruleID}", srv.UpdateRule)
 			r.Delete("/flags/{key}/rules/{ruleID}", srv.DeleteRule)
 
+			// Segments CRUD
+			r.Post("/segments", srv.CreateSegment)
+			r.Get("/segments", srv.ListSegments)
+			r.Get("/segments/{key}", srv.GetSegment)
+			r.Put("/segments/{key}", srv.UpdateSegment)
+			r.Delete("/segments/{key}", srv.DeleteSegment)
+
 			// API Keys management
 			r.Post("/api-keys", srv.CreateAPIKey)
 			r.Get("/api-keys", srv.ListAPIKeys)
