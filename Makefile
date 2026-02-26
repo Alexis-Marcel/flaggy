@@ -1,13 +1,13 @@
 .PHONY: build run test test-coverage clean
 
-BINARY=flaggyd
 BUILD_DIR=bin
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/flaggyd
+	go build -o $(BUILD_DIR)/flaggyd ./cmd/flaggyd
+	go build -o $(BUILD_DIR)/flaggy ./cmd/flaggy
 
 run: build
-	$(BUILD_DIR)/$(BINARY)
+	$(BUILD_DIR)/flaggyd
 
 test:
 	go test ./...
