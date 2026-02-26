@@ -1,0 +1,24 @@
+package store
+
+import "github.com/alexis/flaggy/internal/models"
+
+// Store defines the persistence interface for flags and rules.
+type Store interface {
+	// Flags
+	CreateFlag(flag *models.Flag) error
+	GetFlag(key string) (*models.Flag, error)
+	ListFlags() ([]models.Flag, error)
+	UpdateFlag(key string, req *models.UpdateFlagRequest) (*models.Flag, error)
+	DeleteFlag(key string) error
+	ToggleFlag(key string) (*models.Flag, error)
+
+	// Rules
+	CreateRule(flagKey string, rule *models.Rule) error
+	UpdateRule(flagKey string, ruleID int64, req *models.CreateRuleRequest) (*models.Rule, error)
+	DeleteRule(flagKey string, ruleID int64) error
+
+	// Evaluation
+	GetFlagForEvaluation(key string) (*models.Flag, error)
+
+	Close() error
+}

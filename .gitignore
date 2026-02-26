@@ -1,0 +1,13 @@
+# Binaries
+bin/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Coverage
+coverage.out
+
+# IDE
+.idea/

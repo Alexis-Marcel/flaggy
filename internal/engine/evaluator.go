@@ -1,0 +1,88 @@
+package engine
+
+import (
+	"encoding/json"
+	"sort"
+
+	"github.com/alexis/flaggy/internal/models"
+)
+
+const (
+	ReasonDisabled  = "disabled"
+	ReasonDefault   = "default"
+	ReasonRuleMatch = "rule_match"
+	ReasonError     = "error"
+)
+
+// Evaluate evaluates a flag against the given context.
+// Algorithm:
+//  1. If flag is disabled → return default value
+//  2. Sort rules by priority (ascending = highest priority first)
+//  3. For each rule, check all conditions. First rule where ALL conditions match → return rule's value
+//  4. No rule matched → return default value
+func Evaluate(flag *models.Flag, ctx EvalContext) models.EvaluateResponse {
+	resp := models.EvaluateResponse{
+		FlagKey: flag.Key,
+	}
+
+	if !flag.Enabled {
+		resp.Value = flag.DefaultValue
+		resp.Reason = ReasonDisabled
+		return resp
+	}
+
+	if len(flag.Rules) == 0 {
+		resp.Value = flag.DefaultValue
+		resp.Reason = ReasonDefault
+		return resp
+	}
+
+	// Sort rules by priority (lower number = higher priority)
+	rules := make([]models.Rule, len(flag.Rules))
+	copy(rules, flag.Rules)
+	sort.Slice(rules, func(i, j int) bool {
+		return rules[i].Priority < rules[j].Priority
+	})
+
+	for _, rule := range rules {
+		matched, err := evalRule(&rule, ctx)
+		if err != nil {
+			resp.Value = flag.DefaultValue
+			resp.Reason = ReasonError
+			return resp
+		}
+		if matched {
+			resp.Value = rule.Value
+			resp.Match = true
+			resp.Reason = ReasonRuleMatch
+			return resp
+		}
+	}
+
+	resp.Value = flag.DefaultValue
+	resp.Reason = ReasonDefault
+	return resp
+}
+
+// evalRule returns true if ALL conditions in the rule match.
+func evalRule(rule *models.Rule, ctx EvalContext) (bool, error) {
+	for i := range rule.Conditions {
+		ok, err := EvalCondition(&rule.Conditions[i], ctx)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// MustJSON marshals v to json.RawMessage, panicking on error. Test helper.
+func MustJSON(v interface{}) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
