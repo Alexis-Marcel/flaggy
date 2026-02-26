@@ -20,5 +20,11 @@ type Store interface {
 	// Evaluation
 	GetFlagForEvaluation(key string) (*models.Flag, error)
 
+	// API Keys
+	CreateAPIKey(key *models.APIKey, hashedKey string) error
+	ListAPIKeys() ([]models.APIKey, error)
+	ValidateAPIKey(hashedKey string) (*models.APIKey, error)
+	RevokeAPIKey(id string) error
+
 	Close() error
 }

@@ -15,7 +15,8 @@ type Server struct {
 }
 
 // NewRouter creates a Chi router with all routes wired.
-func NewRouter(s store.Store, b *sse.Broadcaster) *chi.Mux {
+// masterKey protects admin routes. If empty, auth is disabled (dev mode).
+func NewRouter(s store.Store, b *sse.Broadcaster, masterKey string) *chi.Mux {
 	srv := &Server{store: s, broadcaster: b}
 
 	r := chi.NewRouter()
@@ -23,31 +24,49 @@ func NewRouter(s store.Store, b *sse.Broadcaster) *chi.Mux {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Flags
-		r.Post("/flags", srv.CreateFlag)
-		r.Get("/flags", srv.ListFlags)
-		r.Get("/flags/{key}", srv.GetFlag)
-		r.Put("/flags/{key}", srv.UpdateFlag)
-		r.Delete("/flags/{key}", srv.DeleteFlag)
-		r.Patch("/flags/{key}/toggle", srv.ToggleFlag)
+		// Admin routes — protected by master key
+		r.Group(func(r chi.Router) {
+			r.Use(RequireMasterKey(masterKey))
 
-		// Rules
-		r.Post("/flags/{key}/rules", srv.CreateRule)
-		r.Put("/flags/{key}/rules/{ruleID}", srv.UpdateRule)
-		r.Delete("/flags/{key}/rules/{ruleID}", srv.DeleteRule)
+			// Flags CRUD
+			r.Post("/flags", srv.CreateFlag)
+			r.Get("/flags", srv.ListFlags)
+			r.Get("/flags/{key}", srv.GetFlag)
+			r.Put("/flags/{key}", srv.UpdateFlag)
+			r.Delete("/flags/{key}", srv.DeleteFlag)
+			r.Patch("/flags/{key}/toggle", srv.ToggleFlag)
 
-		// Evaluate
-		r.Post("/evaluate", srv.Evaluate)
-		r.Post("/evaluate/batch", srv.EvaluateBatch)
+			// Rules CRUD
+			r.Post("/flags/{key}/rules", srv.CreateRule)
+			r.Put("/flags/{key}/rules/{ruleID}", srv.UpdateRule)
+			r.Delete("/flags/{key}/rules/{ruleID}", srv.DeleteRule)
 
-		// SSE Stream
-		r.Get("/stream", srv.Stream)
+			// API Keys management
+			r.Post("/api-keys", srv.CreateAPIKey)
+			r.Get("/api-keys", srv.ListAPIKeys)
+			r.Delete("/api-keys/{id}", srv.RevokeAPIKey)
+		})
+
+		// Client routes — protected by API key (or master key)
+		r.Group(func(r chi.Router) {
+			r.Use(RequireAPIKey(s, masterKey))
+
+			r.Post("/evaluate", srv.Evaluate)
+			r.Post("/evaluate/batch", srv.EvaluateBatch)
+		})
+
+		// SSE Stream — protected by API key (or master key)
+		r.Group(func(r chi.Router) {
+			r.Use(RequireAPIKey(s, masterKey))
+
+			r.Get("/stream", srv.Stream)
+		})
 	})
 
 	return r

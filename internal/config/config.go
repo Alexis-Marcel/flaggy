@@ -3,14 +3,16 @@ package config
 import "os"
 
 type Config struct {
-	Port   string
-	DBPath string
+	Port      string
+	DBPath    string
+	MasterKey string // Required for admin routes (key management, flag CRUD)
 }
 
 func Load() Config {
 	c := Config{
-		Port:   ":8080",
-		DBPath: "flaggy.db",
+		Port:      ":8080",
+		DBPath:    "flaggy.db",
+		MasterKey: os.Getenv("FLAGGY_MASTER_KEY"),
 	}
 	if v := os.Getenv("FLAGGY_PORT"); v != "" {
 		c.Port = v

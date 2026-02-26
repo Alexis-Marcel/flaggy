@@ -184,7 +184,6 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 	}
 	defer tx.Rollback()
 
-	// Update the rule
 	res, err := tx.Exec(
 		`UPDATE rules SET description = ?, value = ?, priority = ?, rollout_percentage = ?, updated_at = ?
 		 WHERE id = ? AND flag_key = ?`,
@@ -198,7 +197,6 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 		return nil, fmt.Errorf("rule not found")
 	}
 
-	// Replace conditions: delete old, insert new
 	if _, err := tx.Exec(`DELETE FROM conditions WHERE rule_id = ?`, ruleID); err != nil {
 		return nil, fmt.Errorf("delete conditions: %w", err)
 	}
@@ -256,29 +254,7 @@ func (s *SQLiteStore) DeleteRule(flagKey string, ruleID int64) error {
 // --- Evaluation ---
 
 func (s *SQLiteStore) GetFlagForEvaluation(key string) (*models.Flag, error) {
-	// Query 1: Get the flag
-	flag := &models.Flag{}
-	var defaultVal string
-	err := s.db.QueryRow(
-		`SELECT key, type, description, enabled, default_value, created_at, updated_at
-		 FROM flags WHERE key = ?`, key,
-	).Scan(&flag.Key, &flag.Type, &flag.Description, &flag.Enabled,
-		&defaultVal, &flag.CreatedAt, &flag.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get flag: %w", err)
-	}
-	flag.DefaultValue = json.RawMessage(defaultVal)
-
-	// Query 2: Get rules + conditions via JOIN
-	rules, err := s.getRulesForFlag(key)
-	if err != nil {
-		return nil, err
-	}
-	flag.Rules = rules
-	return flag, nil
+	return s.GetFlag(key)
 }
 
 func (s *SQLiteStore) getRulesForFlag(flagKey string) ([]models.Rule, error) {

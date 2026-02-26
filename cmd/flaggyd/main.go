@@ -30,7 +30,11 @@ func main() {
 	broadcaster := sse.NewBroadcaster()
 	defer broadcaster.Close()
 
-	router := api.NewRouter(db, broadcaster)
+	if cfg.MasterKey == "" {
+		slog.Warn("FLAGGY_MASTER_KEY not set — auth disabled (dev mode)")
+	}
+
+	router := api.NewRouter(db, broadcaster, cfg.MasterKey)
 
 	srv := &http.Server{
 		Addr:        cfg.Port,
