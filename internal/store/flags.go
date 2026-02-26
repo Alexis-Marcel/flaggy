@@ -145,10 +145,10 @@ func (s *SQLiteStore) CreateRule(flagKey string, rule *models.Rule) error {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO rules (flag_key, description, value, priority, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO rules (flag_key, description, value, priority, rollout_percentage, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		rule.FlagKey, rule.Description, string(rule.Value), rule.Priority,
-		rule.CreatedAt, rule.UpdatedAt,
+		rule.RolloutPercentage, rule.CreatedAt, rule.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert rule: %w", err)
@@ -186,9 +186,9 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 
 	// Update the rule
 	res, err := tx.Exec(
-		`UPDATE rules SET description = ?, value = ?, priority = ?, updated_at = ?
+		`UPDATE rules SET description = ?, value = ?, priority = ?, rollout_percentage = ?, updated_at = ?
 		 WHERE id = ? AND flag_key = ?`,
-		req.Description, string(req.Value), req.Priority, now, ruleID, flagKey,
+		req.Description, string(req.Value), req.Priority, req.RolloutPercentage, now, ruleID, flagKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("update rule: %w", err)
@@ -204,12 +204,13 @@ func (s *SQLiteStore) UpdateRule(flagKey string, ruleID int64, req *models.Creat
 	}
 
 	rule := &models.Rule{
-		ID:          ruleID,
-		FlagKey:     flagKey,
-		Description: req.Description,
-		Value:       req.Value,
-		Priority:    req.Priority,
-		UpdatedAt:   now,
+		ID:                ruleID,
+		FlagKey:           flagKey,
+		Description:       req.Description,
+		Value:             req.Value,
+		Priority:          req.Priority,
+		RolloutPercentage: req.RolloutPercentage,
+		UpdatedAt:         now,
 	}
 
 	for _, c := range req.Conditions {
@@ -282,7 +283,8 @@ func (s *SQLiteStore) GetFlagForEvaluation(key string) (*models.Flag, error) {
 
 func (s *SQLiteStore) getRulesForFlag(flagKey string) ([]models.Rule, error) {
 	rows, err := s.db.Query(
-		`SELECT r.id, r.flag_key, r.description, r.value, r.priority, r.created_at, r.updated_at,
+		`SELECT r.id, r.flag_key, r.description, r.value, r.priority, r.rollout_percentage,
+		        r.created_at, r.updated_at,
 		        c.id, c.rule_id, c.attribute, c.operator, c.value, c.created_at
 		 FROM rules r
 		 LEFT JOIN conditions c ON c.rule_id = r.id
@@ -307,7 +309,7 @@ func (s *SQLiteStore) getRulesForFlag(flagKey string) ([]models.Rule, error) {
 
 		if err := rows.Scan(
 			&r.ID, &r.FlagKey, &r.Description, &ruleVal, &r.Priority,
-			&r.CreatedAt, &r.UpdatedAt,
+			&r.RolloutPercentage, &r.CreatedAt, &r.UpdatedAt,
 			&cID, &cRuleID, &cAttr, &cOp, &cVal, &cCreated,
 		); err != nil {
 			return nil, fmt.Errorf("scan rule: %w", err)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/alexis/flaggy/internal/api"
 	"github.com/alexis/flaggy/internal/config"
+	"github.com/alexis/flaggy/internal/sse"
 	"github.com/alexis/flaggy/internal/store"
 )
 
@@ -19,21 +20,24 @@ func main() {
 
 	slog.Info("starting flaggy", "port", cfg.Port, "db", cfg.DBPath)
 
-	db, err := store.NewSQLiteStore(cfg.DBPath, "migrations/001_initial.sql")
+	db, err := store.NewSQLiteStore(cfg.DBPath, "migrations")
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	router := api.NewRouter(db)
+	broadcaster := sse.NewBroadcaster()
+	defer broadcaster.Close()
+
+	router := api.NewRouter(db, broadcaster)
 
 	srv := &http.Server{
-		Addr:         cfg.Port,
-		Handler:      router,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:        cfg.Port,
+		Handler:     router,
+		ReadTimeout: 10 * time.Second,
+		IdleTimeout: 120 * time.Second,
+		// No WriteTimeout — SSE streams are long-lived connections
 	}
 
 	// Graceful shutdown

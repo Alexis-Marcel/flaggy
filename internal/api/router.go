@@ -4,17 +4,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
+	"github.com/alexis/flaggy/internal/sse"
 	"github.com/alexis/flaggy/internal/store"
 )
 
 // Server holds dependencies for all HTTP handlers.
 type Server struct {
-	store store.Store
+	store       store.Store
+	broadcaster *sse.Broadcaster
 }
 
 // NewRouter creates a Chi router with all routes wired.
-func NewRouter(s store.Store) *chi.Mux {
-	srv := &Server{store: s}
+func NewRouter(s store.Store, b *sse.Broadcaster) *chi.Mux {
+	srv := &Server{store: s, broadcaster: b}
 
 	r := chi.NewRouter()
 	r.Use(RequestLogger)
@@ -42,6 +44,10 @@ func NewRouter(s store.Store) *chi.Mux {
 
 		// Evaluate
 		r.Post("/evaluate", srv.Evaluate)
+		r.Post("/evaluate/batch", srv.EvaluateBatch)
+
+		// SSE Stream
+		r.Get("/stream", srv.Stream)
 	})
 
 	return r

@@ -53,14 +53,15 @@ type Flag struct {
 }
 
 type Rule struct {
-	ID          int64           `json:"id"`
-	FlagKey     string          `json:"flag_key"`
-	Description string          `json:"description"`
-	Value       json.RawMessage `json:"value"`
-	Priority    int             `json:"priority"`
-	Conditions  []Condition     `json:"conditions"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID                int64           `json:"id"`
+	FlagKey           string          `json:"flag_key"`
+	Description       string          `json:"description"`
+	Value             json.RawMessage `json:"value"`
+	Priority          int             `json:"priority"`
+	RolloutPercentage int             `json:"rollout_percentage"`
+	Conditions        []Condition     `json:"conditions"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
 }
 
 type Condition struct {
@@ -92,6 +93,9 @@ func ValidateFlag(f *Flag) error {
 func ValidateRule(r *Rule) error {
 	if len(r.Conditions) == 0 {
 		return fmt.Errorf("rule must have at least one condition")
+	}
+	if r.RolloutPercentage < 0 || r.RolloutPercentage > 100 {
+		return fmt.Errorf("rollout_percentage must be between 0 and 100")
 	}
 	for i, c := range r.Conditions {
 		if err := ValidateCondition(&c); err != nil {

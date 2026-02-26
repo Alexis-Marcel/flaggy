@@ -11,6 +11,7 @@ const (
 	ReasonDisabled  = "disabled"
 	ReasonDefault   = "default"
 	ReasonRuleMatch = "rule_match"
+	ReasonRollout   = "rollout"
 	ReasonError     = "error"
 )
 
@@ -44,6 +45,9 @@ func Evaluate(flag *models.Flag, ctx EvalContext) models.EvaluateResponse {
 		return rules[i].Priority < rules[j].Priority
 	})
 
+	// Resolve entity ID for rollout bucketing
+	entityID, _ := resolveEntityID(ctx)
+
 	for _, rule := range rules {
 		matched, err := evalRule(&rule, ctx)
 		if err != nil {
@@ -52,6 +56,12 @@ func Evaluate(flag *models.Flag, ctx EvalContext) models.EvaluateResponse {
 			return resp
 		}
 		if matched {
+			// Check rollout percentage if set
+			if rule.RolloutPercentage > 0 && rule.RolloutPercentage < 100 {
+				if entityID == "" || !InRollout(flag.Key, entityID, rule.RolloutPercentage) {
+					continue // Not in rollout, try next rule
+				}
+			}
 			resp.Value = rule.Value
 			resp.Match = true
 			resp.Reason = ReasonRuleMatch
@@ -76,6 +86,25 @@ func evalRule(rule *models.Rule, ctx EvalContext) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// resolveEntityID extracts the entity identifier from the context.
+// Looks for "entity_id", "user_id", or "user.id" in that order.
+func resolveEntityID(ctx EvalContext) (string, bool) {
+	for _, key := range []string{"entity_id", "user_id"} {
+		if v, ok := ctx[key]; ok {
+			if s, ok := toString(v); ok {
+				return s, true
+			}
+		}
+	}
+	// Try nested user.id
+	if v, ok := resolveAttribute(ctx, "user.id"); ok {
+		if s, ok := toString(v); ok {
+			return s, true
+		}
+	}
+	return "", false
 }
 
 // MustJSON marshals v to json.RawMessage, panicking on error. Test helper.

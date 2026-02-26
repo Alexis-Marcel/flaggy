@@ -17,10 +17,20 @@ type UpdateFlagRequest struct {
 }
 
 type CreateRuleRequest struct {
-	Description string          `json:"description"`
-	Conditions  []Condition     `json:"conditions"`
-	Value       json.RawMessage `json:"value"`
-	Priority    int             `json:"priority"`
+	Description       string          `json:"description"`
+	Conditions        []Condition     `json:"conditions"`
+	Value             json.RawMessage `json:"value"`
+	Priority          int             `json:"priority"`
+	RolloutPercentage int             `json:"rollout_percentage"`
+}
+
+type BatchEvaluateRequest struct {
+	Flags   []string               `json:"flags"`
+	Context map[string]interface{} `json:"context"`
+}
+
+type BatchEvaluateResponse struct {
+	Results []EvaluateResponse `json:"results"`
 }
 
 type EvaluateRequest struct {

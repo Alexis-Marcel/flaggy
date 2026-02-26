@@ -1,11 +1,14 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alexis/flaggy/internal/models"
+	"github.com/alexis/flaggy/internal/sse"
 )
 
 func (s *Server) CreateFlag(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +36,9 @@ func (s *Server) CreateFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.broadcaster.Publish(sse.Event{
+		ID: fmt.Sprintf("%d", time.Now().UnixMilli()), Type: "flag_created", Data: flag,
+	})
 	respondJSON(w, http.StatusCreated, flag)
 }
 
@@ -80,6 +86,9 @@ func (s *Server) UpdateFlag(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, "flag not found")
 		return
 	}
+	s.broadcaster.Publish(sse.Event{
+		ID: fmt.Sprintf("%d", time.Now().UnixMilli()), Type: "flag_updated", Data: flag,
+	})
 	respondJSON(w, http.StatusOK, flag)
 }
 
@@ -89,6 +98,9 @@ func (s *Server) DeleteFlag(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	s.broadcaster.Publish(sse.Event{
+		ID: fmt.Sprintf("%d", time.Now().UnixMilli()), Type: "flag_deleted", Data: map[string]string{"key": key},
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -103,5 +115,8 @@ func (s *Server) ToggleFlag(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, "flag not found")
 		return
 	}
+	s.broadcaster.Publish(sse.Event{
+		ID: fmt.Sprintf("%d", time.Now().UnixMilli()), Type: "flag_toggled", Data: flag,
+	})
 	respondJSON(w, http.StatusOK, flag)
 }

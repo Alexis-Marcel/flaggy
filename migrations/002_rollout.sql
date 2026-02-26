@@ -1,0 +1,1 @@
+ALTER TABLE rules ADD COLUMN rollout_percentage INTEGER NOT NULL DEFAULT 0;

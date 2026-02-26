@@ -13,8 +13,7 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
-// NewSQLiteStore opens a SQLite database and runs migrations.
-// migrationPath is the path to the 001_initial.sql file.
+// NewSQLiteStore opens a SQLite database and runs all migrations from the given directory.
 func NewSQLiteStore(dbPath, migrationPath string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
@@ -42,13 +41,22 @@ func NewSQLiteStore(dbPath, migrationPath string) (*SQLiteStore, error) {
 	return s, nil
 }
 
-func (s *SQLiteStore) migrate(path string) error {
-	migration, err := os.ReadFile(path)
+func (s *SQLiteStore) migrate(dir string) error {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("read migration: %w", err)
+		return fmt.Errorf("read migrations dir: %w", err)
 	}
-	if _, err := s.db.Exec(string(migration)); err != nil {
-		return fmt.Errorf("exec migration: %w", err)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(dir + "/" + e.Name())
+		if err != nil {
+			return fmt.Errorf("read %s: %w", e.Name(), err)
+		}
+		if _, err := s.db.Exec(string(data)); err != nil {
+			return fmt.Errorf("exec %s: %w", e.Name(), err)
+		}
 	}
 	return nil
 }
