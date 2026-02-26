@@ -3,7 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"os"
+	"io/fs"
 
 	_ "modernc.org/sqlite"
 )
@@ -13,8 +13,8 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
-// NewSQLiteStore opens a SQLite database and runs all migrations from the given directory.
-func NewSQLiteStore(dbPath, migrationPath string) (*SQLiteStore, error) {
+// NewSQLiteStore opens a SQLite database and runs all embedded migrations.
+func NewSQLiteStore(dbPath string, migrationsFS fs.FS) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
@@ -34,23 +34,23 @@ func NewSQLiteStore(dbPath, migrationPath string) (*SQLiteStore, error) {
 	}
 
 	s := &SQLiteStore{db: db}
-	if err := s.migrate(migrationPath); err != nil {
+	if err := s.migrate(migrationsFS); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return s, nil
 }
 
-func (s *SQLiteStore) migrate(dir string) error {
-	entries, err := os.ReadDir(dir)
+func (s *SQLiteStore) migrate(fsys fs.FS) error {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		return fmt.Errorf("read migrations dir: %w", err)
+		return fmt.Errorf("read migrations: %w", err)
 	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		data, err := os.ReadFile(dir + "/" + e.Name())
+		data, err := fs.ReadFile(fsys, e.Name())
 		if err != nil {
 			return fmt.Errorf("read %s: %w", e.Name(), err)
 		}

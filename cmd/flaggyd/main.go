@@ -13,14 +13,17 @@ import (
 	"github.com/alexis/flaggy/internal/config"
 	"github.com/alexis/flaggy/internal/sse"
 	"github.com/alexis/flaggy/internal/store"
+	"github.com/alexis/flaggy/migrations"
 )
+
+var version = "dev"
 
 func main() {
 	cfg := config.Load()
 
-	slog.Info("starting flaggy", "port", cfg.Port, "db", cfg.DBPath)
+	slog.Info("starting flaggy", "version", version, "port", cfg.Port, "db", cfg.DBPath)
 
-	db, err := store.NewSQLiteStore(cfg.DBPath, "migrations")
+	db, err := store.NewSQLiteStore(cfg.DBPath, migrations.FS)
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
 		os.Exit(1)
