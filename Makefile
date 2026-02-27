@@ -3,11 +3,10 @@
 BUILD_DIR=bin
 
 build:
-	go build -o $(BUILD_DIR)/flaggyd ./cmd/flaggyd
 	go build -o $(BUILD_DIR)/flaggy ./cmd/flaggy
 
 run: build
-	$(BUILD_DIR)/flaggyd
+	$(BUILD_DIR)/flaggy serve
 
 test:
 	go test ./...

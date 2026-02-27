@@ -10,6 +10,7 @@ import (
 var (
 	serverURL string
 	apiKey    string
+	Version   = "dev"
 )
 
 var rootCmd = &cobra.Command{
@@ -20,10 +21,11 @@ var rootCmd = &cobra.Command{
 func init() {
 	_ = godotenv.Load() // .env is optional, must run before os.Getenv
 
-	defaultServer := "http://localhost:8080"
-	if v := os.Getenv("FLAGGY_SERVER"); v != "" {
-		defaultServer = v
+	port := os.Getenv("FLAGGY_PORT")
+	if port == "" {
+		port = ":8080"
 	}
+	defaultServer := "http://localhost" + port
 
 	defaultKey := os.Getenv("FLAGGY_MASTER_KEY")
 
