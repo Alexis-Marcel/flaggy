@@ -41,7 +41,7 @@ func main() {
 		slog.Warn("FLAGGY_MASTER_KEY not set — auth disabled (dev mode)")
 	}
 
-	router := api.NewRouter(db, broadcaster, cfg.MasterKey)
+	router := api.NewRouter(db, broadcaster, cfg.MasterKey, cfg.CORSEnabled)
 
 	srv := &http.Server{
 		Addr:        cfg.Port,

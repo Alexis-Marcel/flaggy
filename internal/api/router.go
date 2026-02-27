@@ -15,12 +15,14 @@ type Server struct {
 
 // NewRouter creates a Chi router with all routes wired.
 // masterKey protects admin routes. If empty, auth is disabled (dev mode).
-func NewRouter(s store.Store, b *sse.Broadcaster, masterKey string) *chi.Mux {
+func NewRouter(s store.Store, b *sse.Broadcaster, masterKey string, corsEnabled bool) *chi.Mux {
 	srv := &Server{store: s, broadcaster: b}
 
 	r := chi.NewRouter()
 	r.Use(RequestLogger)
-	r.Use(CORS)
+	if corsEnabled {
+		r.Use(CORS)
+	}
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Admin routes — protected by master key
