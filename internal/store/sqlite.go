@@ -42,6 +42,13 @@ func NewSQLiteStore(dbPath string, migrationsFS fs.FS) (*SQLiteStore, error) {
 }
 
 func (s *SQLiteStore) migrate(fsys fs.FS) error {
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		filename TEXT PRIMARY KEY,
+		applied_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+
 	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return fmt.Errorf("read migrations: %w", err)
@@ -50,12 +57,24 @@ func (s *SQLiteStore) migrate(fsys fs.FS) error {
 		if e.IsDir() {
 			continue
 		}
+
+		var count int
+		if err := s.db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE filename = ?", e.Name()).Scan(&count); err != nil {
+			return fmt.Errorf("check migration %s: %w", e.Name(), err)
+		}
+		if count > 0 {
+			continue
+		}
+
 		data, err := fs.ReadFile(fsys, e.Name())
 		if err != nil {
 			return fmt.Errorf("read %s: %w", e.Name(), err)
 		}
 		if _, err := s.db.Exec(string(data)); err != nil {
 			return fmt.Errorf("exec %s: %w", e.Name(), err)
+		}
+		if _, err := s.db.Exec("INSERT INTO schema_migrations (filename) VALUES (?)", e.Name()); err != nil {
+			return fmt.Errorf("record migration %s: %w", e.Name(), err)
 		}
 	}
 	return nil

@@ -8,23 +8,21 @@ import (
 )
 
 func (s *Server) Stream(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		respondError(w, http.StatusInternalServerError, "streaming not supported")
-		return
-	}
+	rc := http.NewResponseController(w)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
+	w.WriteHeader(http.StatusOK)
+	rc.Flush() // Force send headers immediately
 
 	events, unsub := s.broadcaster.Subscribe()
 	defer unsub()
 
 	// Send initial connection event
 	fmt.Fprintf(w, "event: connected\ndata: {\"status\":\"ok\"}\n\n")
-	flusher.Flush()
+	rc.Flush()
 
 	// Keepalive ticker
 	ticker := time.NewTicker(30 * time.Second)
@@ -43,10 +41,10 @@ func (s *Server) Stream(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "id: %s\n", event.ID)
 			}
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
-			flusher.Flush()
+			rc.Flush()
 		case <-ticker.C:
 			fmt.Fprintf(w, ": keepalive\n\n")
-			flusher.Flush()
+			rc.Flush()
 		}
 	}
 }

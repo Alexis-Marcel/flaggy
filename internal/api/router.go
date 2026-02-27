@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors"
 
 	"github.com/alexis/flaggy/internal/sse"
 	"github.com/alexis/flaggy/internal/store"
@@ -21,13 +20,7 @@ func NewRouter(s store.Store, b *sse.Broadcaster, masterKey string) *chi.Mux {
 
 	r := chi.NewRouter()
 	r.Use(RequestLogger)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
-		AllowCredentials: false,
-		MaxAge:           300,
-	}))
+	r.Use(CORS)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Admin routes — protected by master key

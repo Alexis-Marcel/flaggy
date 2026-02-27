@@ -11,3 +11,6 @@ coverage.out
 
 # IDE
 .idea/
+
+# Env
+.env

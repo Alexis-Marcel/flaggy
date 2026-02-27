@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"github.com/alexis/flaggy/internal/api"
 	"github.com/alexis/flaggy/internal/config"
 	"github.com/alexis/flaggy/internal/sse"
@@ -19,6 +21,8 @@ import (
 var version = "dev"
 
 func main() {
+	_ = godotenv.Load() // .env is optional
+
 	cfg := config.Load()
 
 	slog.Info("starting flaggy", "version", version, "port", cfg.Port, "db", cfg.DBPath)

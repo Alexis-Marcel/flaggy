@@ -27,13 +27,21 @@ func Evaluate(flag *models.Flag, ctx EvalContext) models.EvaluateResponse {
 	}
 
 	if !flag.Enabled {
-		resp.Value = flag.DefaultValue
+		if flag.Type == "boolean" {
+			resp.Value = json.RawMessage("false")
+		} else {
+			resp.Value = flag.DefaultValue
+		}
 		resp.Reason = ReasonDisabled
 		return resp
 	}
 
 	if len(flag.Rules) == 0 {
-		resp.Value = flag.DefaultValue
+		if flag.Type == "boolean" {
+			resp.Value = json.RawMessage("true")
+		} else {
+			resp.Value = flag.DefaultValue
+		}
 		resp.Reason = ReasonDefault
 		return resp
 	}
